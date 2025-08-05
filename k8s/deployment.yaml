@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: azure-files-demo
-  namespace: azure-files-demo
   labels:
     app: azure-files-demo
 spec:
@@ -16,10 +15,11 @@ spec:
         app: azure-files-demo
     spec:
       containers:
-      - name: file-writer
-        image: nginx:alpine
+      - name: django-app
+        image: acritalynorth01.azurecr.io/azure-files-demo:latest
+        imagePullPolicy: Always
         ports:
-        - containerPort: 80
+        - containerPort: 8000
         volumeMounts:
         - name: azure-files-volume
           mountPath: /data
@@ -32,213 +32,33 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
-        command: ["/bin/sh"]
-        args:
-        - -c
-        - |
-          # Create initial data structure
-          mkdir -p /data/logs /data/uploads /data/backup-test
-          
-          # Create an index.html file
-          cat > /usr/share/nginx/html/index.html << 'EOF'
-          <!DOCTYPE html>
-          <html>
-          <head>
-              <title>Azure Files Demo</title>
-              <style>
-                  body { font-family: Arial, sans-serif; margin: 40px; }
-                  .container { max-width: 800px; margin: 0 auto; }
-                  .status { background: #e8f5e8; padding: 20px; border-radius: 5px; margin: 20px 0; }
-                  .file-list { background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0; }
-                  pre { background: #f0f0f0; padding: 10px; border-radius: 3px; overflow-x: auto; }
-                  .button { background: #007acc; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 10px 5px; }
-                  .button:hover { background: #005a9e; }
-              </style>
-          </head>
-          <body>
-              <div class="container">
-                  <h1>🗂️ Azure Files Demo Application</h1>
-                  <div class="status">
-                      <h3>✅ Azure Files Mount Status: Active</h3>
-                      <p><strong>Pod:</strong> $POD_NAME</p>
-                      <p><strong>Node:</strong> $NODE_NAME</p>
-                      <p><strong>Mount Point:</strong> /data</p>
-                      <p><strong>Storage Class:</strong> azurefile-csi-premium</p>
-                      <p><strong>Access Mode:</strong> ReadWriteMany</p>
-                  </div>
-                  
-                  <h2>📋 Application Purpose</h2>
-                  <p>This application demonstrates Azure Files integration for backup testing with the following features:</p>
-                  <ul>
-                      <li><strong>Persistent Storage:</strong> Data survives pod restarts and rescheduling</li>
-                      <li><strong>Multi-Pod Access:</strong> ReadWriteMany access mode allows multiple pods to access the same volume</li>
-                      <li><strong>Backup-Ready Structure:</strong> Organized data structure for backup demonstrations</li>
-                      <li><strong>Real-Time Monitoring:</strong> Live file operations and activity logging</li>
-                      <li><strong>Data Generation:</strong> Continuous creation of sample data for backup scenarios</li>
-                  </ul>
-                  
-                  <div style="background: #fff3cd; padding: 15px; border-radius: 5px; margin: 15px 0;">
-                      <strong>💡 Backup Testing:</strong> This application creates structured data in multiple directories 
-                      (logs/, uploads/, backup-test/) that you can use to demonstrate backup and restore operations 
-                      with your Azure Files volume.
-                  </div>
-                  
-                  <h3>📁 Current Files in Azure Files:</h3>
-                  <div class="file-list">
-                      <pre id="file-list">Loading file list...</pre>
-                  </div>
-                  
-                  <h3>📝 Recent Activity Log:</h3>
-                  <div class="file-list">
-                      <pre id="activity-log">Loading activity log...</pre>
-                  </div>
-                  
-                  <h3>🔧 Actions:</h3>
-                  <button class="button" onclick="createTestFile()">Create Test File</button>
-                  <button class="button" onclick="updateFileList()">Refresh Data</button>
-              </div>
-              
-              <script>
-                  function updateFileList() {
-                      fetch('/api/files')
-                          .then(response => response.text())
-                          .then(data => {
-                              document.getElementById('file-list').textContent = data;
-                          })
-                          .catch(error => {
-                              document.getElementById('file-list').textContent = 'Error loading file list: ' + error;
-                          });
-                  }
-                  
-                  function updateActivityLog() {
-                      fetch('/api/activity')
-                          .then(response => response.text())
-                          .then(data => {
-                              document.getElementById('activity-log').textContent = data;
-                          })
-                          .catch(error => {
-                              document.getElementById('activity-log').textContent = 'Error loading activity log: ' + error;
-                          });
-                  }
-                  
-                  function createTestFile() {
-                      fetch('/api/create-test-file', { method: 'POST' })
-                          .then(() => {
-                              setTimeout(() => {
-                                  updateFileList();
-                                  updateActivityLog();
-                              }, 1000);
-                          })
-                          .catch(error => console.error('Error creating test file:', error));
-                  }
-                  
-                  // Update every 10 seconds
-                  setInterval(() => {
-                      updateFileList();
-                      updateActivityLog();
-                  }, 10000);
-                  
-                  // Initial load
-                  updateFileList();
-                  updateActivityLog();
-              </script>
-          </body>
-          </html>
-          EOF
-          
-          # Start background process to generate demo data
-          (
-            while true; do
-              TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
-              RANDOM_ID=$(date +%s | tail -c 4)
-              
-              # Write to various directories to simulate real application usage
-              echo "[$TIMESTAMP] Pod $POD_NAME on node $NODE_NAME - Sample data entry $RANDOM_ID" >> /data/logs/application.log
-              echo "[$TIMESTAMP] System metrics - CPU: $((RANDOM % 100))%, Memory: $((RANDOM % 100))%, Disk: $((RANDOM % 100))%" >> /data/logs/metrics.log
-              
-              # Create sample user data files
-              echo "User data created at $TIMESTAMP by pod $POD_NAME" > "/data/uploads/user_file_$RANDOM_ID.txt"
-              echo "Additional metadata: User ID $((RANDOM % 1000)), Session $RANDOM_ID" >> "/data/uploads/user_file_$RANDOM_ID.txt"
-              
-              # Create backup test files with varying content
-              echo "Backup test data - File created: $TIMESTAMP, Pod: $POD_NAME, Random: $RANDOM_ID" > "/data/backup-test/test_$RANDOM_ID.txt"
-              echo "Test scenario: Volume persistence across pod restarts" >> "/data/backup-test/test_$RANDOM_ID.txt"
-              echo "Backup verification data: $(echo $RANDOM_ID | md5sum | cut -d' ' -f1)" >> "/data/backup-test/test_$RANDOM_ID.txt"
-              
-              # Log activity
-              echo "[$TIMESTAMP] AUTO: Created files - application.log, metrics.log, user_file_$RANDOM_ID.txt, test_$RANDOM_ID.txt" >> /data/activity.log
-              
-              # Keep only last 100 entries in activity log to prevent unlimited growth
-              tail -n 100 /data/activity.log > /data/activity.log.tmp && mv /data/activity.log.tmp /data/activity.log
-              
-              # Keep only recent files to prevent unlimited growth (keep last 30 files in uploads and backup-test)
-              find /data/uploads -name "*.txt" -type f | head -n -30 | xargs rm -f 2>/dev/null || true
-              find /data/backup-test -name "*.txt" -type f | head -n -30 | xargs rm -f 2>/dev/null || true
-              
-              sleep 45
-            done
-          ) &
-          
-          # Configure nginx to serve API endpoints
-          cat > /etc/nginx/conf.d/api.conf << 'EOF'
-          server {
-              listen 80;
-              server_name localhost;
-              
-              location / {
-                  root /usr/share/nginx/html;
-                  index index.html;
-              }
-              
-              location /api/files {
-                  add_header Content-Type text/plain;
-                  alias /tmp/files.txt;
-              }
-              
-              location /api/activity {
-                  add_header Content-Type text/plain;
-                  alias /data/activity.log;
-              }
-              
-              location /api/create-test-file {
-                  add_header Content-Type text/plain;
-                  return 200 "Test file creation requested";
-              }
-          }
-          EOF
-          
-          # Background process to update file list for API
-          (
-            while true; do
-              {
-                echo "=== Azure Files Directory Structure ==="
-                echo ""
-                echo "📁 /data structure:"
-                find /data -type d | sort
-                echo ""
-                echo "📄 Recent files (last 20):"
-                find /data -type f -printf "%T@ %Tc %p\n" 2>/dev/null | sort -n | tail -20 | cut -d' ' -f2-
-                echo ""
-                echo "📊 Directory Summary:"
-                echo "  • Logs: $(find /data/logs -name "*.log" 2>/dev/null | wc -l) files"
-                echo "  • Uploads: $(find /data/uploads -name "*.txt" 2>/dev/null | wc -l) files"
-                echo "  • Backup tests: $(find /data/backup-test -name "*.txt" 2>/dev/null | wc -l) files"
-                echo ""
-                echo "💾 Storage Usage:"
-                echo "  • Total size: $(du -sh /data 2>/dev/null | cut -f1 || echo 'N/A')"
-                echo "  • Available space: $(df -h /data 2>/dev/null | tail -1 | awk '{print $4}' || echo 'N/A')"
-                echo ""
-                echo "🕒 Last updated: $(date)"
-              } > /tmp/files.txt
-              sleep 15
-            done
-          ) &
-          
-          # Initialize activity log
-          echo "[$(date '+%Y-%m-%d %H:%M:%S')] APPLICATION: Azure Files Demo started on pod $POD_NAME" > /data/activity.log
-          
-          # Start nginx
-          nginx -g 'daemon off;'
+        - name: FILES_STORAGE_PATH
+          value: "/data"
+        - name: DEBUG
+          value: "False"
+        - name: SECRET_KEY
+          value: "django-production-secret-key-change-me"
+        livenessProbe:
+          httpGet:
+            path: /api/health/
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /api/health/
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+        resources:
+          requests:
+            cpu: 100m
+            memory: 256Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
       volumes:
       - name: azure-files-volume
         persistentVolumeClaim:

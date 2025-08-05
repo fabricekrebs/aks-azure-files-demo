@@ -1,0 +1,58 @@
+# Django
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+env/
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+.git
+.mypy_cache
+.pytest_cache
+.hypothesis
+
+# Development
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Local development
+/venv/
+/env/
+/.env
+/staticfiles/
+/media/
+db.sqlite3
+
+# Build artifacts
+/dist/
+/build/
+*.egg-info/
+
+# Documentation
+/docs/_build/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/

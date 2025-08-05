@@ -1,0 +1,308 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="page-header">
+    <h1>📁 Files Manager</h1>
+    <p>Manage files on your Azure Files persistent volume</p>
+</div>
+
+<div class="grid">
+    <div class="card">
+        <h2>📝 Create New File</h2>
+        <form id="createFileForm">
+            <div class="form-group">
+                <label for="newFileName">Filename:</label>
+                <input type="text" id="newFileName" placeholder="e.g., document.txt" required>
+            </div>
+            <div class="form-group">
+                <label for="newFileContent">Content:</label>
+                <textarea id="newFileContent" rows="8" placeholder="Enter file content..."></textarea>
+            </div>
+            <button type="submit" class="button">Create File</button>
+        </form>
+        <div id="createResult"></div>
+    </div>
+    
+    <div class="card">
+        <h2>📂 File List</h2>
+        <div class="file-actions">
+            <button class="button" onclick="refreshFileList()">🔄 Refresh</button>
+            <span id="fileCount" class="file-count"></span>
+        </div>
+        <div id="fileList" class="file-list">
+            <div class="loading">Loading files...</div>
+        </div>
+    </div>
+</div>
+
+<div class="card full-width">
+    <h2>👁️ File Viewer</h2>
+    <div class="viewer-controls">
+        <input type="text" id="viewFileName" placeholder="Enter filename to view" class="filename-input">
+        <button class="button" onclick="viewFile()">View File</button>
+        <button class="button secondary" onclick="clearViewer()">Clear</button>
+    </div>
+    <div id="fileViewer" class="file-viewer">
+        <div class="placeholder">Select a file to view its content</div>
+    </div>
+</div>
+
+<!-- File Upload Modal -->
+<div id="uploadModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeUploadModal()">&times;</span>
+        <h2>Upload File</h2>
+        <form id="uploadForm">
+            <div class="form-group">
+                <label for="fileInput">Choose File:</label>
+                <input type="file" id="fileInput" accept="*/*">
+            </div>
+            <div class="form-group">
+                <label for="uploadFileName">Save as:</label>
+                <input type="text" id="uploadFileName" placeholder="filename.txt">
+            </div>
+            <button type="submit" class="button">Upload</button>
+        </form>
+        <div id="uploadResult"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentFiles = [];
+
+// Initialize page
+document.addEventListener('DOMContentLoaded', function() {
+    refreshFileList();
+    
+    // Create file form handler
+    document.getElementById('createFileForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        createFile();
+    });
+    
+    // Enter key in filename input
+    document.getElementById('viewFileName').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            viewFile();
+        }
+    });
+});
+
+async function createFile() {
+    const filename = document.getElementById('newFileName').value.trim();
+    const content = document.getElementById('newFileContent').value;
+    const resultDiv = document.getElementById('createResult');
+    
+    if (!filename) {
+        showMessage(resultDiv, 'Please enter a filename', 'error');
+        return;
+    }
+    
+    try {
+        resultDiv.innerHTML = '<div class="info">Creating file...</div>';
+        
+        const response = await fetch('/api/files/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify({ filename, content })
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            showMessage(resultDiv, `File "${filename}" created successfully!`, 'success');
+            document.getElementById('newFileName').value = '';
+            document.getElementById('newFileContent').value = '';
+            refreshFileList();
+        } else {
+            showMessage(resultDiv, `Error: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        showMessage(resultDiv, `Network error: ${error.message}`, 'error');
+    }
+}
+
+async function refreshFileList() {
+    const fileListDiv = document.getElementById('fileList');
+    const fileCountSpan = document.getElementById('fileCount');
+    
+    try {
+        fileListDiv.innerHTML = '<div class="loading">Loading files...</div>';
+        
+        const response = await fetch('/api/files/');
+        const data = await response.json();
+        
+        if (response.ok) {
+            currentFiles = data.files;
+            renderFileList(currentFiles);
+            fileCountSpan.textContent = `${currentFiles.length} files`;
+        } else {
+            fileListDiv.innerHTML = `<div class="error">Error loading files: ${data.error}</div>`;
+            fileCountSpan.textContent = '';
+        }
+    } catch (error) {
+        fileListDiv.innerHTML = `<div class="error">Network error: ${error.message}</div>`;
+        fileCountSpan.textContent = '';
+    }
+}
+
+function renderFileList(files) {
+    const fileListDiv = document.getElementById('fileList');
+    
+    if (files.length === 0) {
+        fileListDiv.innerHTML = '<div class="empty-state">No files found. Create your first file!</div>';
+        return;
+    }
+    
+    const html = files.map(file => `
+        <div class="file-item">
+            <div class="file-info">
+                <div class="file-name">${escapeHtml(file.name)}</div>
+                <div class="file-meta">
+                    ${formatFileSize(file.size)} • 
+                    ${formatDate(file.modified)} • 
+                    ${file.mime_type}
+                </div>
+            </div>
+            <div class="file-actions">
+                <button class="button small" onclick="quickView('${escapeHtml(file.name)}')">👁️ View</button>
+                <button class="button small secondary" onclick="downloadFile('${escapeHtml(file.name)}')">💾 Download</button>
+                <button class="button small danger" onclick="deleteFile('${escapeHtml(file.name)}')">🗑️ Delete</button>
+            </div>
+        </div>
+    `).join('');
+    
+    fileListDiv.innerHTML = html;
+}
+
+async function viewFile() {
+    const filename = document.getElementById('viewFileName').value.trim();
+    await quickView(filename);
+}
+
+async function quickView(filename) {
+    if (!filename) {
+        showMessage(document.getElementById('fileViewer'), 'Please enter a filename', 'error');
+        return;
+    }
+    
+    const viewerDiv = document.getElementById('fileViewer');
+    document.getElementById('viewFileName').value = filename;
+    
+    try {
+        viewerDiv.innerHTML = '<div class="loading">Loading file content...</div>';
+        
+        const response = await fetch(`/api/files/${encodeURIComponent(filename)}/`);
+        const data = await response.json();
+        
+        if (response.ok) {
+            viewerDiv.innerHTML = `
+                <div class="file-header">
+                    <h3>📄 ${escapeHtml(data.filename)}</h3>
+                </div>
+                <div class="file-content">${escapeHtml(data.content)}</div>
+            `;
+        } else {
+            viewerDiv.innerHTML = `<div class="error">Error: ${data.error}</div>`;
+        }
+    } catch (error) {
+        viewerDiv.innerHTML = `<div class="error">Network error: ${error.message}</div>`;
+    }
+}
+
+function clearViewer() {
+    document.getElementById('fileViewer').innerHTML = '<div class="placeholder">Select a file to view its content</div>';
+    document.getElementById('viewFileName').value = '';
+}
+
+async function deleteFile(filename) {
+    if (!confirm(`Are you sure you want to delete "${filename}"?`)) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/files/${encodeURIComponent(filename)}/`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRFToken': getCSRFToken()
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            alert(`File "${filename}" deleted successfully!`);
+            refreshFileList();
+            
+            // Clear viewer if showing deleted file
+            const currentViewing = document.getElementById('viewFileName').value;
+            if (currentViewing === filename) {
+                clearViewer();
+            }
+        } else {
+            alert(`Error deleting file: ${result.error}`);
+        }
+    } catch (error) {
+        alert(`Network error: ${error.message}`);
+    }
+}
+
+async function downloadFile(filename) {
+    try {
+        const response = await fetch(`/api/files/${encodeURIComponent(filename)}/`);
+        const data = await response.json();
+        
+        if (response.ok) {
+            // Create download link
+            const blob = new Blob([data.content], { type: 'text/plain' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } else {
+            alert(`Error downloading file: ${data.error}`);
+        }
+    } catch (error) {
+        alert(`Network error: ${error.message}`);
+    }
+}
+
+// Utility functions
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+function formatDate(isoString) {
+    const date = new Date(isoString);
+    return date.toLocaleString();
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showMessage(element, message, type) {
+    element.innerHTML = `<div class="${type}">${message}</div>`;
+    setTimeout(() => {
+        if (element.innerHTML.includes(message)) {
+            element.innerHTML = '';
+        }
+    }, 5000);
+}
+</script>
+{% endblock %}

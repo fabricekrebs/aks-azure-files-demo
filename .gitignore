@@ -9,6 +9,52 @@
 .DS_Store
 Thumbs.db
 
+# Django
+app/**/*.pyc
+app/**/__pycache__/
+app/**/*.pyo
+app/**/*.pyd
+app/.Python
+app/env/
+app/pip-log.txt
+app/pip-delete-this-directory.txt
+app/.tox/
+app/.coverage
+app/.coverage.*
+app/.cache
+app/nosetests.xml
+app/coverage.xml
+app/**/*.cover
+app/**/*.log
+app/.mypy_cache
+app/.pytest_cache
+app/.hypothesis
+
+# Local development
+app/venv/
+app/env/
+app/.env
+app/staticfiles/
+app/media/
+app/db.sqlite3
+app/data/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
+# Documentation
+docs/_build/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Kubernetes
+*.log
+
 # Backup files
 *.bak
 *.backup

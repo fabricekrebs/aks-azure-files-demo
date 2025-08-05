@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="hero">
+    <h1>Welcome to Azure Files Demo</h1>
+    <p class="lead">Demonstrating persistent file storage with Azure Files on AKS</p>
+</div>
+
+<div class="grid">
+    <div class="card">
+        <h2>🗂️ File Management</h2>
+        <p>Create, view, and manage files stored on the Azure Files persistent volume.</p>
+        <a href="/files/" class="button">Manage Files</a>
+    </div>
+    
+    <div class="card">
+        <h2>📊 System Info</h2>
+        <div class="info-grid">
+            <div class="info-item">
+                <strong>Pod Name:</strong>
+                <span>{{ pod_name }}</span>
+            </div>
+            <div class="info-item">
+                <strong>Node Name:</strong>
+                <span>{{ node_name }}</span>
+            </div>
+            <div class="info-item">
+                <strong>Storage Path:</strong>
+                <span>{{ storage_path }}</span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h2>🔄 Persistence Test</h2>
+        <p>Files created here will persist across pod restarts, demonstrating Azure Files durability.</p>
+        <button class="button" onclick="testPersistence()">Test Persistence</button>
+        <div id="persistenceResult"></div>
+    </div>
+    
+    <div class="card">
+        <h2>🏥 Health Check</h2>
+        <p>Monitor the health of the application and storage connectivity.</p>
+        <button class="button" onclick="checkHealth()">Check Health</button>
+        <div id="healthResult"></div>
+    </div>
+</div>
+
+<div class="section">
+    <h2>About This Demo</h2>
+    <p>
+        This Django application demonstrates Azure Files integration with Azure Kubernetes Service (AKS). 
+        It showcases:
+    </p>
+    <ul>
+        <li><strong>Persistent Storage:</strong> Files are stored on an Azure Files share mounted as a Kubernetes persistent volume</li>
+        <li><strong>Data Durability:</strong> Files persist across pod restarts and rescheduling</li>
+        <li><strong>RESTful API:</strong> Backend API for file operations built with Django REST Framework</li>
+        <li><strong>Modern Frontend:</strong> Responsive web interface with JavaScript</li>
+        <li><strong>Container Ready:</strong> Optimized for containerized deployment on Kubernetes</li>
+    </ul>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function testPersistence() {
+    const resultDiv = document.getElementById('persistenceResult');
+    resultDiv.innerHTML = '<div class="info">Testing persistence...</div>';
+    
+    try {
+        const timestamp = new Date().toISOString();
+        const testData = {
+            filename: 'persistence_test.txt',
+            content: `Persistence test created at: ${timestamp}\nPod: {{ pod_name }}\nNode: {{ node_name }}`
+        };
+        
+        const response = await fetch('/api/files/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCSRFToken()
+            },
+            body: JSON.stringify(testData)
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            resultDiv.innerHTML = '<div class="success">Persistence test file created successfully!</div>';
+        } else {
+            resultDiv.innerHTML = `<div class="error">Error: ${result.error}</div>`;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `<div class="error">Network error: ${error.message}</div>`;
+    }
+}
+
+async function checkHealth() {
+    const resultDiv = document.getElementById('healthResult');
+    resultDiv.innerHTML = '<div class="info">Checking health...</div>';
+    
+    try {
+        const response = await fetch('/api/health/');
+        const health = await response.json();
+        
+        if (response.ok && health.status === 'healthy') {
+            resultDiv.innerHTML = `
+                <div class="success">
+                    <strong>System Healthy</strong><br>
+                    Storage: ${health.storage_status}<br>
+                    Timestamp: ${health.timestamp}
+                </div>
+            `;
+        } else {
+            resultDiv.innerHTML = `
+                <div class="error">
+                    <strong>System Unhealthy</strong><br>
+                    Error: ${health.error || 'Unknown error'}
+                </div>
+            `;
+        }
+    } catch (error) {
+        resultDiv.innerHTML = `<div class="error">Health check failed: ${error.message}</div>`;
+    }
+}
+</script>
+{% endblock %}
